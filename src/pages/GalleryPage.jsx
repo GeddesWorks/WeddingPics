@@ -1,0 +1,254 @@
+import { useState, useEffect, useCallback } from 'react';
+import { storage, BUCKET_ID, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
+
+const SESSION_KEY = 'weddingpics_gallery_auth';
+const GALLERY_PASSWORD = import.meta.env.VITE_GALLERY_PASSWORD || 'jonathan&amanda';
+
+function Leaf({ className = '' }) {
+  return (
+    <svg viewBox="0 0 120 60" className={className} aria-hidden>
+      <path d="M10 50 Q40 5 80 20 Q60 45 10 50Z" fill="currentColor" opacity="0.18" />
+      <path d="M90 55 Q110 20 115 10 Q100 35 85 55Z" fill="currentColor" opacity="0.13" />
+    </svg>
+  );
+}
+
+function PasswordGate({ onUnlock }) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState(false);
+  const [shaking, setShaking] = useState(false);
+
+  const attempt = () => {
+    if (value === GALLERY_PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, '1');
+      onUnlock();
+    } else {
+      setError(true);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-garden-gradient flex flex-col items-center justify-center px-4">
+      <Leaf className="fixed top-4 left-0 w-36 text-olive-500 -rotate-12 pointer-events-none" />
+      <Leaf className="fixed bottom-4 right-0 w-36 text-mulberry-400 rotate-12 scale-x-[-1] pointer-events-none" />
+
+      <div className={`card w-full max-w-sm text-center transition-transform ${shaking ? 'animate-[wiggle_0.4s_ease-in-out]' : ''}`}>
+        <p className="font-serif italic text-olive-500 text-sm mb-1">Private gallery</p>
+        <h2 className="font-serif text-3xl text-olive-800 mb-1">Jonathan &amp; Amanda</h2>
+        <p className="font-sans text-olive-400 text-xs tracking-widest uppercase mb-6">May 16, 2026</p>
+
+        <input
+          type="password"
+          value={value}
+          onChange={e => { setValue(e.target.value); setError(false); }}
+          onKeyDown={e => e.key === 'Enter' && attempt()}
+          placeholder="Enter password"
+          autoFocus
+          className={`w-full bg-white/60 border rounded-xl px-4 py-3 font-sans text-olive-900
+                      placeholder:text-olive-300 focus:outline-none transition-colors mb-1
+                      ${error ? 'border-raspberry-400 focus:border-raspberry-400' : 'border-olive-200 focus:border-olive-400'}`}
+        />
+        {error && (
+          <p className="font-sans text-xs text-raspberry-500 mb-3 text-left">Incorrect password.</p>
+        )}
+
+        <button className="btn-primary w-full mt-3" onClick={attempt}>
+          View photos
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes wiggle {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function Lightbox({ file, onClose, onPrev, onNext }) {
+  const url = getFileViewUrl(file.$id);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') onPrev();
+      if (e.key === 'ArrowRight') onNext();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, onPrev, onNext]);
+
+  const guestName = file.name.replace(/_\d+\.\w+$/, '').replace(/_/g, ' ');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-olive-900/90 backdrop-blur-sm flex flex-col"
+      onClick={onClose}
+    >
+      <div className="flex items-center justify-between px-4 py-3 text-white/80" onClick={e => e.stopPropagation()}>
+        <span className="font-sans text-sm truncate max-w-xs">{guestName}</span>
+        <div className="flex gap-3 items-center">
+          <a
+            href={url}
+            download
+            className="font-sans text-sm hover:text-white transition-colors"
+            onClick={e => e.stopPropagation()}
+          >
+            ↓ Download
+          </a>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={onPrev}
+          className="absolute left-2 z-10 text-white/60 hover:text-white text-3xl px-3 py-6"
+        >
+          ‹
+        </button>
+        <img
+          src={url}
+          alt=""
+          className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+        />
+        <button
+          onClick={onNext}
+          className="absolute right-2 z-10 text-white/60 hover:text-white text-3xl px-3 py-6"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PhotoGrid({ files, onSelect }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {files.map((file, idx) => {
+        const preview = getFilePreviewUrl(file.$id);
+        const guestName = file.name.replace(/_\d+\.\w+$/, '').replace(/_/g, ' ');
+        return (
+          <button
+            key={file.$id}
+            onClick={() => onSelect(idx)}
+            className="relative aspect-square overflow-hidden rounded-xl group focus:outline-none
+                       focus:ring-2 focus:ring-olive-400"
+          >
+            <img
+              src={preview}
+              alt=""
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              loading="lazy"
+            />
+            <div className="absolute inset-0 bg-olive-900/0 group-hover:bg-olive-900/20 transition-colors" />
+            <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/40 to-transparent
+                            opacity-0 group-hover:opacity-100 transition-opacity">
+              <p className="font-sans text-white text-xs truncate">{guestName}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function GalleryPage() {
+  const [unlocked, setUnlocked] = useState(() => !!sessionStorage.getItem(SESSION_KEY));
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  const loadMore = useCallback(async () => {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    try {
+      const queries = ['limit(50)'];
+      if (cursor) queries.push(`cursorAfter("${cursor}")`);
+
+      const res = await storage.listFiles(BUCKET_ID, queries);
+      setFiles(prev => [...prev, ...res.files]);
+      if (res.files.length < 50) {
+        setHasMore(false);
+      } else {
+        setCursor(res.files[res.files.length - 1].$id);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, hasMore, cursor]);
+
+  useEffect(() => {
+    if (unlocked) loadMore();
+  }, [unlocked]);
+
+  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />;
+
+  return (
+    <div className="min-h-screen bg-garden-gradient">
+      <div className="max-w-2xl mx-auto px-4 pb-16">
+        <div className="text-center pt-10 pb-6 relative">
+          <Leaf className="absolute top-2 left-0 w-28 text-olive-500 -rotate-12 pointer-events-none" />
+          <Leaf className="absolute top-2 right-0 w-28 text-mulberry-400 rotate-12 scale-x-[-1] pointer-events-none" />
+          <p className="font-serif italic text-olive-500 text-sm tracking-widest uppercase mb-1">Guest photos</p>
+          <h1 className="font-serif text-4xl text-olive-800">
+            Jonathan <span className="text-mulberry-400">&amp;</span> Amanda
+          </h1>
+          <p className="font-sans text-olive-400 text-xs tracking-widest uppercase mt-2">May 16, 2026</p>
+          <div className="flex items-center justify-center gap-3 mt-3">
+            <div className="h-px w-12 bg-olive-200" />
+            <span className="text-raspberry-400">✦</span>
+            <div className="h-px w-12 bg-olive-200" />
+          </div>
+          {files.length > 0 && (
+            <p className="font-sans text-sm text-olive-400 mt-3">{files.length} photo{files.length !== 1 ? 's' : ''}</p>
+          )}
+        </div>
+
+        {files.length === 0 && !loading && (
+          <div className="card text-center py-12">
+            <p className="font-serif italic text-olive-400 text-xl">No photos yet</p>
+            <p className="font-sans text-olive-300 text-sm mt-2">Guest photos will appear here</p>
+          </div>
+        )}
+
+        {files.length > 0 && (
+          <PhotoGrid files={files} onSelect={setLightboxIdx} />
+        )}
+
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="w-6 h-6 border-2 border-olive-300 border-t-olive-600 rounded-full animate-spin" />
+          </div>
+        )}
+
+        {hasMore && !loading && files.length > 0 && (
+          <div className="flex justify-center mt-6">
+            <button className="btn-ghost" onClick={loadMore}>Load more</button>
+          </div>
+        )}
+      </div>
+
+      {lightboxIdx !== null && (
+        <Lightbox
+          file={files[lightboxIdx]}
+          onClose={() => setLightboxIdx(null)}
+          onPrev={() => setLightboxIdx(i => (i - 1 + files.length) % files.length)}
+          onNext={() => setLightboxIdx(i => (i + 1) % files.length)}
+        />
+      )}
+    </div>
+  );
+}
