@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { storage, BUCKET_ID, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
+import { storage, BUCKET_ID, Query, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
 
 const SESSION_KEY = 'weddingpics_gallery_auth';
 const GALLERY_PASSWORD = import.meta.env.VITE_GALLERY_PASSWORD || 'jonathan&amanda';
@@ -173,8 +173,8 @@ export default function GalleryPage() {
     if (loading || !hasMore) return;
     setLoading(true);
     try {
-      const queries = ['limit(50)'];
-      if (cursor) queries.push(`cursorAfter("${cursor}")`);
+      const queries = [Query.limit(50), Query.orderDesc('$createdAt')];
+      if (cursor) queries.push(Query.cursorAfter(cursor));
 
       const res = await storage.listFiles(BUCKET_ID, queries);
       setFiles(prev => [...prev, ...res.files]);
