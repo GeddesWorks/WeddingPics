@@ -1,6 +1,32 @@
 import { useState, useRef, useCallback } from 'react';
 import { storage, BUCKET_ID, ID } from '../lib/appwrite';
 
+const MAX_PX = 2000;
+const JPEG_QUALITY = 0.85;
+
+async function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { naturalWidth: w, naturalHeight: h } = img;
+      const scale = Math.min(1, MAX_PX / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
+        'image/jpeg',
+        JPEG_QUALITY
+      );
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 const NAME_KEY = 'weddingpics_guest_name';
 
 function LeafDecor({ className = '' }) {
@@ -184,9 +210,10 @@ export default function UploadPage() {
       setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'uploading', progress: 10 } : i));
 
       try {
-        const renamedFile = new File([item.file], buildFileName(item.file), { type: item.file.type });
+        const blob = await compressImage(item.file);
+        const compressed = new File([blob], buildFileName(item.file), { type: 'image/jpeg' });
 
-        await storage.createFile(BUCKET_ID, ID.unique(), renamedFile);
+        await storage.createFile(BUCKET_ID, ID.unique(), compressed);
 
         setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done', progress: 100 } : i));
       } catch (err) {
@@ -237,9 +264,13 @@ export default function UploadPage() {
           )}
         </div>
 
-        <p className="text-center font-sans text-xs text-olive-300 mt-6">
-          Photos are shared privately with Jonathan &amp; Amanda
-        </p>
+        <div className="mt-4 flex items-start gap-2 bg-olive-50 border border-olive-200 rounded-xl px-4 py-3">
+          <span className="text-olive-400 mt-0.5 shrink-0">🔒</span>
+          <p className="font-sans text-xs text-olive-500 leading-relaxed">
+            Photos you upload are <strong className="text-olive-700">private</strong> — they can only be
+            viewed and downloaded by Jonathan &amp; Amanda. They will not be shared publicly.
+          </p>
+        </div>
       </div>
     </div>
   );
