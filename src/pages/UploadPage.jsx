@@ -4,6 +4,12 @@ import { storage, BUCKET_ID, ID } from '../lib/appwrite';
 const MAX_PX = 2000;
 const JPEG_QUALITY = 0.85;
 const UPLOAD_ATTEMPTS = 3;
+const CANVAS_AREA_LIMIT = 16_000_000; // mobile Safari canvas budget
+const HEIC_RE = /\.(heic|heif)$/i;
+
+function isHeic(file) {
+  return /heic|heif/i.test(file.type) || HEIC_RE.test(file.name);
+}
 
 function isRateLimitError(err) {
   return err?.code === 429 || /rate limit|too many/i.test(err?.message || '');
@@ -25,27 +31,55 @@ async function createFileWithRetry(file) {
   throw lastErr;
 }
 
-async function compressImage(file) {
+function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const { naturalWidth: w, naturalHeight: h } = img;
-      const scale = Math.min(1, MAX_PX / Math.max(w, h));
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
-        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
-        'image/jpeg',
-        JPEG_QUALITY
-      );
-    };
-    img.onerror = reject;
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not decode image')); };
     img.src = url;
   });
+}
+
+async function compressImage(file) {
+  const img = await loadImage(file);
+  let srcDrawable = img;
+  let srcW = img.naturalWidth;
+  let srcH = img.naturalHeight;
+
+  // Halve until within canvas budget (handles 48MP iPhone shots on mobile Safari)
+  while (srcW * srcH > CANVAS_AREA_LIMIT) {
+    const step = document.createElement('canvas');
+    step.width = Math.max(1, Math.round(srcW / 2));
+    step.height = Math.max(1, Math.round(srcH / 2));
+    step.getContext('2d').drawImage(srcDrawable, 0, 0, step.width, step.height);
+    srcDrawable = step;
+    srcW = step.width;
+    srcH = step.height;
+  }
+
+  const scale = Math.min(1, MAX_PX / Math.max(srcW, srcH));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(srcW * scale));
+  out.height = Math.max(1, Math.round(srcH * scale));
+  out.getContext('2d').drawImage(srcDrawable, 0, 0, out.width, out.height);
+
+  return new Promise((resolve, reject) => {
+    out.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
+      'image/jpeg',
+      JPEG_QUALITY
+    );
+  });
+}
+
+async function prepareUpload(file, baseName) {
+  if (isHeic(file)) {
+    const ext = (file.name.match(HEIC_RE)?.[1] || 'heic').toLowerCase();
+    return new File([file], `${baseName}.${ext}`, { type: file.type || 'image/heic' });
+  }
+  const blob = await compressImage(file);
+  return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
 }
 
 const NAME_KEY = 'weddingpics_guest_name';
@@ -221,11 +255,10 @@ export default function UploadPage() {
     }
   };
 
-  const buildFileName = (file) => {
-    const ext = file.name.split('.').pop() || 'jpg';
+  const buildBaseName = () => {
     const guest = (nameRef.current.trim() || 'guest').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
     const rand = Math.random().toString(36).slice(2, 8);
-    return `${guest}_${Date.now()}_${rand}.${ext}`;
+    return `${guest}_${Date.now()}_${rand}`;
   };
 
   const processQueue = useCallback(async () => {
@@ -240,9 +273,8 @@ export default function UploadPage() {
       updateItem(next.id, { status: 'uploading', progress: 10 });
 
       try {
-        const blob = await compressImage(next.file);
-        const compressed = new File([blob], buildFileName(next.file), { type: 'image/jpeg' });
-        await createFileWithRetry(compressed);
+        const prepared = await prepareUpload(next.file, buildBaseName());
+        await createFileWithRetry(prepared);
         updateItem(next.id, { status: 'done', progress: 100 });
       } catch (err) {
         updateItem(next.id, { status: 'error', error: err.message || 'Upload failed' });

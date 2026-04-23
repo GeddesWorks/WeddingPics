@@ -37,11 +37,11 @@ Items ordered by priority. Check off as completed.
   - [UploadPage.jsx:195](src/pages/UploadPage.jsx:195) `if (uploading) return` silently drops new selections
   - Queue them instead, or visibly disable the input with a message
 
-- [ ] **7. HEIC handling**
+- [x] **7. HEIC handling**
   - iOS Safari can decode HEIC in canvas; Android Chrome / desktop cannot
   - Detect HEIC by extension/mime → either skip compression and upload raw, or show a clear error
 
-- [ ] **8. Guard against OOM on huge photos**
+- [x] **8. Guard against OOM on huge photos**
   - Canvas on mobile Safari caps around ~16MP; modern iPhones produce 48MP
   - If `w*h > 24_000_000`, downscale in two passes or fall back to original
   - Located in `compressImage` at [UploadPage.jsx:7](src/pages/UploadPage.jsx:7)
