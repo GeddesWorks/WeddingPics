@@ -7,17 +7,17 @@ Items ordered by priority. Check off as completed.
 
 ## 🔴 Critical — security & data safety
 
-- [ ] **1. Lock down Appwrite bucket permissions**
+- [x] **1. Lock down Appwrite bucket permissions** — `create("any")` only; `read`/`update`/`delete` scoped to `user:69e972b9699bd2375194`. Also tightened `allowedFileExtensions` to images and capped `maximumFileSize` at 25MB.
   - Role `any`: `create` only
   - `read` / `update` / `delete`: authenticated admin only (or remove entirely)
   - Verify in Appwrite console → Storage → Bucket → Settings
 
-- [ ] **2. Move gallery behind real auth, not a bundled password**
+- [x] **2. Move gallery behind real auth, not a bundled password** — owner user `owner@wedding.local` created (ID `69e972b9699bd2375194`), gallery uses Appwrite email/password session.
   - `VITE_GALLERY_PASSWORD` ships in the JS bundle — anyone can view-source it
   - Options: Appwrite email/password account for owner; or Cloudflare Access / basic-auth in front of `/gallery`
   - Must also gate `listFiles` and `deleteFile` server-side (see #1)
 
-- [ ] **3. Delete must require authentication**
+- [x] **3. Delete must require authentication** — bucket `delete` is now scoped to the owner user ID only.
   - `storage.deleteFile` at [GalleryPage.jsx:255](src/pages/GalleryPage.jsx:255) should only work for an authenticated admin session
   - Blocked by #1 and #2
 

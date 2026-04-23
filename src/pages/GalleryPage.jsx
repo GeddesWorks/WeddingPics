@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
-import { storage, BUCKET_ID, Query, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
-
-const SESSION_KEY = 'weddingpics_gallery_auth';
-const GALLERY_PASSWORD = import.meta.env.VITE_GALLERY_PASSWORD || 'jonathan&amanda';
+import { storage, account, BUCKET_ID, GALLERY_EMAIL, Query, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
 
 function Leaf({ className = '' }) {
   return (
@@ -16,17 +13,26 @@ function Leaf({ className = '' }) {
 
 function PasswordGate({ onUnlock }) {
   const [value, setValue] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);
   const [shaking, setShaking] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const attempt = () => {
-    if (value === GALLERY_PASSWORD) {
-      sessionStorage.setItem(SESSION_KEY, '1');
+  const attempt = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      try {
+        await account.deleteSession('current');
+      } catch (_) { /* no existing session */ }
+      await account.createEmailPasswordSession(GALLERY_EMAIL, value);
       onUnlock();
-    } else {
-      setError(true);
+    } catch (err) {
+      setError(err?.code === 401 ? 'Incorrect password.' : (err?.message || 'Login failed.'));
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -43,18 +49,21 @@ function PasswordGate({ onUnlock }) {
         <input
           type="password"
           value={value}
-          onChange={e => { setValue(e.target.value); setError(false); }}
+          onChange={e => { setValue(e.target.value); setError(null); }}
           onKeyDown={e => e.key === 'Enter' && attempt()}
           placeholder="Enter password"
           autoFocus
+          disabled={submitting}
           className={`w-full bg-white/60 border rounded-xl px-4 py-3 font-sans text-olive-900
                       placeholder:text-olive-300 focus:outline-none transition-colors mb-1
                       ${error ? 'border-raspberry-400 focus:border-raspberry-400' : 'border-olive-200 focus:border-olive-400'}`}
         />
         {error && (
-          <p className="font-sans text-xs text-raspberry-500 mb-3 text-left">Incorrect password.</p>
+          <p className="font-sans text-xs text-raspberry-500 mb-3 text-left">{error}</p>
         )}
-        <button className="btn-primary w-full mt-3" onClick={attempt}>View photos</button>
+        <button className="btn-primary w-full mt-3" onClick={attempt} disabled={submitting}>
+          {submitting ? 'Unlocking...' : 'View photos'}
+        </button>
       </div>
 
       <style>{`
@@ -215,7 +224,7 @@ async function fetchAllFiles() {
 }
 
 export default function GalleryPage() {
-  const [unlocked, setUnlocked]     = useState(() => !!sessionStorage.getItem(SESSION_KEY));
+  const [authState, setAuthState]   = useState('checking'); // 'checking' | 'locked' | 'unlocked'
   const [files, setFiles]           = useState([]);
   const [loading, setLoading]       = useState(false);
   const [cursor, setCursor]         = useState(null);
@@ -223,6 +232,22 @@ export default function GalleryPage() {
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [confirmFile, setConfirmFile] = useState(null);
   const [zipProgress, setZipProgress] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    account.get()
+      .then(() => { if (!cancelled) setAuthState('unlocked'); })
+      .catch(() => { if (!cancelled) setAuthState('locked'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleLogout = async () => {
+    try { await account.deleteSession('current'); } catch (_) {}
+    setFiles([]);
+    setCursor(null);
+    setHasMore(true);
+    setAuthState('locked');
+  };
 
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return;
@@ -245,8 +270,8 @@ export default function GalleryPage() {
   }, [loading, hasMore, cursor]);
 
   useEffect(() => {
-    if (unlocked) loadMore();
-  }, [unlocked]);
+    if (authState === 'unlocked') loadMore();
+  }, [authState]);
 
   const handleDeleteConfirm = async () => {
     const file = confirmFile;
@@ -295,12 +320,27 @@ export default function GalleryPage() {
     }
   };
 
-  if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />;
+  if (authState === 'checking') {
+    return (
+      <div className="min-h-screen bg-garden-gradient flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-olive-300 border-t-olive-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (authState === 'locked') return <PasswordGate onUnlock={() => setAuthState('unlocked')} />;
 
   return (
     <div className="min-h-screen bg-garden-gradient">
       <div className="max-w-2xl mx-auto px-4 pb-16">
-        <div className="text-center pt-10 pb-6 relative">
+        <div className="flex justify-end pt-4">
+          <button
+            onClick={handleLogout}
+            className="font-sans text-xs text-olive-400 hover:text-olive-600 tracking-widest uppercase"
+          >
+            Log out
+          </button>
+        </div>
+        <div className="text-center pt-4 pb-6 relative">
           <Leaf className="absolute top-2 left-0 w-28 text-olive-500 -rotate-12 pointer-events-none" />
           <Leaf className="absolute top-2 right-0 w-28 text-mulberry-400 rotate-12 scale-x-[-1] pointer-events-none" />
           <p className="font-serif italic text-olive-500 text-sm tracking-widest uppercase mb-1">Guest photos</p>
