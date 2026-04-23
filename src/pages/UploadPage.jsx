@@ -1,8 +1,29 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { storage, BUCKET_ID, ID } from '../lib/appwrite';
 
 const MAX_PX = 2000;
 const JPEG_QUALITY = 0.85;
+const UPLOAD_ATTEMPTS = 3;
+
+function isRateLimitError(err) {
+  return err?.code === 429 || /rate limit|too many/i.test(err?.message || '');
+}
+
+async function createFileWithRetry(file) {
+  let lastErr;
+  for (let attempt = 0; attempt < UPLOAD_ATTEMPTS; attempt++) {
+    try {
+      return await storage.createFile(BUCKET_ID, ID.unique(), file);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === UPLOAD_ATTEMPTS - 1) break;
+      const base = isRateLimitError(err) ? 3000 : 500;
+      const delay = base * Math.pow(3, attempt);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
 
 async function compressImage(file) {
   return new Promise((resolve, reject) => {
@@ -175,6 +196,22 @@ export default function UploadPage() {
   const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
 
+  const queueRef = useRef([]);
+  const processingRef = useRef(false);
+  const nameRef = useRef(name);
+  useEffect(() => { nameRef.current = name; }, [name]);
+
+  const updateItem = useCallback((id, patch) => {
+    queueRef.current = queueRef.current.map(i => i.id === id ? { ...i, ...patch } : i);
+    setQueue(queueRef.current);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      queueRef.current.forEach(i => i.preview && URL.revokeObjectURL(i.preview));
+    };
+  }, []);
+
   const saveName = (val) => {
     setName(val);
     if (val.trim()) {
@@ -186,14 +223,41 @@ export default function UploadPage() {
 
   const buildFileName = (file) => {
     const ext = file.name.split('.').pop() || 'jpg';
-    const guest = (name.trim() || 'guest').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
-    const ts = Date.now();
-    return `${guest}_${ts}.${ext}`;
+    const guest = (nameRef.current.trim() || 'guest').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 30);
+    const rand = Math.random().toString(36).slice(2, 8);
+    return `${guest}_${Date.now()}_${rand}.${ext}`;
   };
 
-  const uploadFiles = async (files) => {
-    if (uploading) return;
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    setUploading(true);
 
+    while (true) {
+      const next = queueRef.current.find(i => i.status === 'pending');
+      if (!next) break;
+
+      updateItem(next.id, { status: 'uploading', progress: 10 });
+
+      try {
+        const blob = await compressImage(next.file);
+        const compressed = new File([blob], buildFileName(next.file), { type: 'image/jpeg' });
+        await createFileWithRetry(compressed);
+        updateItem(next.id, { status: 'done', progress: 100 });
+      } catch (err) {
+        updateItem(next.id, { status: 'error', error: err.message || 'Upload failed' });
+      } finally {
+        if (next.preview) {
+          URL.revokeObjectURL(next.preview);
+        }
+      }
+    }
+
+    processingRef.current = false;
+    setUploading(false);
+  }, [updateItem]);
+
+  const uploadFiles = (files) => {
     const items = files.map(file => ({
       id: Math.random().toString(36).slice(2),
       file,
@@ -203,27 +267,15 @@ export default function UploadPage() {
       error: null,
     }));
 
-    setQueue(prev => [...prev, ...items]);
-    setUploading(true);
+    queueRef.current = [...queueRef.current, ...items];
+    setQueue(queueRef.current);
+    processQueue();
+  };
 
-    for (const item of items) {
-      setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'uploading', progress: 10 } : i));
-
-      try {
-        const blob = await compressImage(item.file);
-        const compressed = new File([blob], buildFileName(item.file), { type: 'image/jpeg' });
-
-        await storage.createFile(BUCKET_ID, ID.unique(), compressed);
-
-        setQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done', progress: 100 } : i));
-      } catch (err) {
-        setQueue(prev => prev.map(i =>
-          i.id === item.id ? { ...i, status: 'error', error: err.message || 'Upload failed' } : i
-        ));
-      }
-    }
-
-    setUploading(false);
+  const resetQueue = () => {
+    queueRef.current.forEach(i => i.preview && URL.revokeObjectURL(i.preview));
+    queueRef.current = [];
+    setQueue([]);
   };
 
   const doneCount = queue.filter(i => i.status === 'done').length;
@@ -236,7 +288,7 @@ export default function UploadPage() {
 
         <div className="card mt-2">
           <NameInput name={name} onChange={saveName} />
-          <UploadZone onFiles={uploadFiles} disabled={uploading} />
+          <UploadZone onFiles={uploadFiles} disabled={false} />
 
           {hasActivity && (
             <div className="mt-5">
@@ -256,7 +308,7 @@ export default function UploadPage() {
               </p>
               <button
                 className="btn-ghost mt-3 text-sm"
-                onClick={() => setQueue([])}
+                onClick={resetQueue}
               >
                 Upload more photos
               </button>
