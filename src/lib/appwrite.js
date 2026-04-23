@@ -10,8 +10,8 @@ export const BUCKET_ID = import.meta.env.VITE_APPWRITE_BUCKET_ID;
 export const GALLERY_EMAIL = import.meta.env.VITE_GALLERY_EMAIL || 'owner@wedding.local';
 export { ID, Query };
 
-export function getFilePreviewUrl(fileId) {
-  return storage.getFilePreview(BUCKET_ID, fileId, 800, 800);
+export function getFilePreviewUrl(fileId, size = 400) {
+  return storage.getFilePreview(BUCKET_ID, fileId, size, size);
 }
 
 export function getFileViewUrl(fileId) {

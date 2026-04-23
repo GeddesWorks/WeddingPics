@@ -54,19 +54,19 @@ Items ordered by priority. Check off as completed.
 
 ## 🟡 Gallery scalability
 
-- [ ] **10. Stream the zip, don't buffer everything in RAM**
+- [x] **10. Stream the zip, don't buffer everything in RAM**
   - Use `zip.generateAsync({ type: 'blob', streamFiles: true })` in [GalleryPage.jsx:285](src/pages/GalleryPage.jsx:285)
   - For very large galleries, split into chunked zips (e.g., 200 per file)
 
-- [ ] **11. Parallelize zip fetches**
+- [x] **11. Parallelize zip fetches**
   - [GalleryPage.jsx:276-283](src/pages/GalleryPage.jsx:276) fetches sequentially
   - Use concurrency pool of ~6
 
-- [ ] **12. Smaller grid thumbnails**
+- [x] **12. Smaller grid thumbnails**
   - `getFilePreview(… 800, 800)` at [GalleryPage.jsx:12](src/lib/appwrite.js:12) is overkill for a 2-col grid
   - Use 400×400 for the grid; full-res only in the lightbox
 
-- [ ] **13. Fix delete race / clamping bug**
+- [x] **13. Fix delete race / clamping bug**
   - Nested `setFiles` in [GalleryPage.jsx:257-263](src/pages/GalleryPage.jsx:257) reads stale state
   - Consolidate into one update
 

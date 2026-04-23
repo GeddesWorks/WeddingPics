@@ -278,14 +278,15 @@ export default function GalleryPage() {
     setConfirmFile(null);
     try {
       await storage.deleteFile(BUCKET_ID, file.$id);
-      setFiles(prev => prev.filter(f => f.$id !== file.$id));
-      if (lightboxIdx !== null) {
-        setFiles(prev => {
-          if (prev.length === 0) setLightboxIdx(null);
-          else setLightboxIdx(i => Math.min(i, prev.length - 1));
-          return prev;
+      setFiles(prev => {
+        const next = prev.filter(f => f.$id !== file.$id);
+        setLightboxIdx(idx => {
+          if (idx === null) return null;
+          if (next.length === 0) return null;
+          return Math.min(idx, next.length - 1);
         });
-      }
+        return next;
+      });
     } catch (err) {
       console.error('Delete failed', err);
     }
@@ -298,16 +299,27 @@ export default function GalleryPage() {
       setZipProgress({ done: 0, total: all.length });
 
       const zip = new JSZip();
-      for (let i = 0; i < all.length; i++) {
-        const file = all[i];
-        const url = storage.getFileDownload(BUCKET_ID, file.$id);
-        const res = await fetch(url);
-        const blob = await res.blob();
-        zip.file(file.name, blob);
-        setZipProgress({ done: i + 1, total: all.length });
-      }
+      let doneCount = 0;
+      const CONCURRENCY = 6;
+      let cursor = 0;
 
-      const content = await zip.generateAsync({ type: 'blob' });
+      const worker = async () => {
+        while (true) {
+          const i = cursor++;
+          if (i >= all.length) return;
+          const file = all[i];
+          const url = storage.getFileDownload(BUCKET_ID, file.$id);
+          const res = await fetch(url);
+          const blob = await res.blob();
+          zip.file(file.name, blob);
+          doneCount++;
+          setZipProgress({ done: doneCount, total: all.length });
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, all.length) }, worker));
+
+      const content = await zip.generateAsync({ type: 'blob', streamFiles: true });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(content);
       a.download = 'jonathan-amanda-wedding-photos.zip';
