@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import JSZip from 'jszip';
 import { storage, account, BUCKET_ID, GALLERY_EMAIL, Query, getFilePreviewUrl, getFileViewUrl } from '../lib/appwrite';
 
@@ -232,6 +232,8 @@ export default function GalleryPage() {
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [confirmFile, setConfirmFile] = useState(null);
   const [zipProgress, setZipProgress] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const sentinelRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +254,7 @@ export default function GalleryPage() {
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const queries = [Query.limit(50), Query.orderDesc('$createdAt')];
       if (cursor) queries.push(Query.cursorAfter(cursor));
@@ -264,10 +267,21 @@ export default function GalleryPage() {
       }
     } catch (err) {
       console.error(err);
+      setLoadError(err?.message || 'Could not load photos.');
     } finally {
       setLoading(false);
     }
   }, [loading, hasMore, cursor]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore || loadError) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) loadMore();
+    }, { rootMargin: '400px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMore, hasMore, loadError]);
 
   useEffect(() => {
     if (authState === 'unlocked') loadMore();
@@ -381,10 +395,18 @@ export default function GalleryPage() {
           </div>
         )}
 
-        {files.length === 0 && !loading && (
+        {files.length === 0 && !loading && !loadError && (
           <div className="card text-center py-12">
             <p className="font-serif italic text-olive-400 text-xl">No photos yet</p>
             <p className="font-sans text-olive-300 text-sm mt-2">Guest photos will appear here</p>
+          </div>
+        )}
+
+        {loadError && files.length === 0 && (
+          <div className="card text-center py-12">
+            <p className="font-serif text-raspberry-500 text-lg">Couldn't load photos</p>
+            <p className="font-sans text-olive-500 text-sm mt-2">{loadError}</p>
+            <button className="btn-ghost mt-4" onClick={loadMore}>Try again</button>
           </div>
         )}
 
@@ -398,10 +420,15 @@ export default function GalleryPage() {
           </div>
         )}
 
-        {hasMore && !loading && files.length > 0 && (
-          <div className="flex justify-center mt-6">
-            <button className="btn-ghost" onClick={loadMore}>Load more</button>
+        {loadError && files.length > 0 && (
+          <div className="text-center mt-6">
+            <p className="font-sans text-sm text-raspberry-500 mb-2">Couldn't load more photos.</p>
+            <button className="btn-ghost" onClick={loadMore}>Try again</button>
           </div>
+        )}
+
+        {hasMore && !loading && !loadError && files.length > 0 && (
+          <div ref={sentinelRef} className="h-8" />
         )}
       </div>
 

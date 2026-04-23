@@ -74,13 +74,13 @@ Items ordered by priority. Check off as completed.
 
 ## 🟢 Polish
 
-- [ ] **14. Remove `capture="environment"`** at [UploadPage.jsx:108](src/pages/UploadPage.jsx:108) — forces camera on some Androids instead of letting user pick from gallery
+- [x] **14. Remove `capture="environment"`** at [UploadPage.jsx:108](src/pages/UploadPage.jsx:108) — forces camera on some Androids instead of letting user pick from gallery
 
-- [ ] **15. Filename collision guard** — add index or random suffix in `buildFileName` at [UploadPage.jsx:187](src/pages/UploadPage.jsx:187)
+- [x] **15. Filename collision guard** — done as part of #4/#6/#9; random 6-char suffix added to base name. — add index or random suffix in `buildFileName` at [UploadPage.jsx:187](src/pages/UploadPage.jsx:187)
 
-- [ ] **16. Infinite scroll** — replace "Load more" button with IntersectionObserver in gallery
+- [x] **16. Infinite scroll** — replace "Load more" button with IntersectionObserver in gallery
 
-- [ ] **17. Visible error state on `listFiles` failure** — [GalleryPage.jsx:241](src/pages/GalleryPage.jsx:241) currently only `console.error`s; UI shows misleading "No photos yet"
+- [x] **17. Visible error state on `listFiles` failure** — [GalleryPage.jsx:241](src/pages/GalleryPage.jsx:241) currently only `console.error`s; UI shows misleading "No photos yet"
 
 ---
 
