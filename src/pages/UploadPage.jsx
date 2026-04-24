@@ -75,8 +75,19 @@ async function compressImage(file) {
 
 async function prepareUpload(file, baseName) {
   if (isHeic(file)) {
-    const ext = (file.name.match(HEIC_RE)?.[1] || 'heic').toLowerCase();
-    return new File([file], `${baseName}.${ext}`, { type: file.type || 'image/heic' });
+    // Try to compress (works on iOS Safari which can decode HEIC natively).
+    // On browsers that can't decode HEIC (Firefox, Chrome on Windows/Android),
+    // loadImage will fail — throw a user-friendly error rather than uploading
+    // a raw HEIC that Appwrite can't preview.
+    try {
+      const blob = await compressImage(file);
+      return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+    } catch {
+      throw new Error(
+        'HEIC photos can only be uploaded from an iPhone or iPad. ' +
+        'To upload from a PC, convert the file to JPEG first.'
+      );
+    }
   }
   const blob = await compressImage(file);
   return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });

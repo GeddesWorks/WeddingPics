@@ -53,6 +53,10 @@ function PasswordGate({ onUnlock }) {
           onKeyDown={e => e.key === 'Enter' && attempt()}
           placeholder="Enter password"
           autoFocus
+          autoComplete="current-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           disabled={submitting}
           className={`w-full bg-white/60 border rounded-xl px-4 py-3 font-sans text-olive-900
                       placeholder:text-olive-300 focus:outline-none transition-colors mb-1
@@ -103,7 +107,22 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
 
 function Lightbox({ file, onClose, onPrev, onNext, onDelete }) {
   const url = getFileViewUrl(file.$id);
-  const downloadUrl = storage.getFileDownload(BUCKET_ID, file.$id);
+
+  const handleDownload = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(storage.getFileDownload(BUCKET_ID, file.$id), { credentials: 'include' });
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = file.name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error('Download failed', err);
+    }
+  };
 
   useEffect(() => {
     const handler = (e) => {
@@ -122,14 +141,12 @@ function Lightbox({ file, onClose, onPrev, onNext, onDelete }) {
       <div className="flex items-center justify-between px-4 py-3 text-white/80" onClick={e => e.stopPropagation()}>
         <span className="font-sans text-sm truncate max-w-xs">{guestName}</span>
         <div className="flex gap-4 items-center">
-          <a
-            href={downloadUrl}
-            download
+          <button
+            onClick={e => { e.stopPropagation(); handleDownload(e); }}
             className="font-sans text-sm hover:text-white transition-colors"
-            onClick={e => e.stopPropagation()}
           >
             ↓ Download
-          </a>
+          </button>
           <button
             onClick={e => { e.stopPropagation(); onDelete(file); }}
             className="font-sans text-sm text-raspberry-300 hover:text-raspberry-200 transition-colors"
@@ -166,6 +183,12 @@ function PhotoGrid({ files, onSelect, onDelete }) {
                 alt=""
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
+                onError={e => {
+                  // Preview generation fails for HEIC — fall back to raw view URL
+                  if (e.currentTarget.src !== getFileViewUrl(file.$id)) {
+                    e.currentTarget.src = getFileViewUrl(file.$id);
+                  }
+                }}
               />
               <div className="absolute inset-0 bg-olive-900/0 group-hover:bg-olive-900/20 transition-colors rounded-xl" />
               <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/40 to-transparent
