@@ -86,9 +86,17 @@ Items ordered by priority. Check off as completed.
 
 ## Pre-launch sanity checks (do the week of)
 
-- [ ] Appwrite platform has the production domain whitelisted (CORS)
-- [ ] Storage quota has headroom for 100 guests × ~15 photos × ~500KB ≈ 750MB
-- [ ] Rate limits set appropriately for expected burst
-- [ ] Test on an actual iPhone (HEIC) and Android (large JPEG) on cellular
-- [ ] Test gallery download-all with a realistic count (50+ photos)
-- [ ] Confirm gallery auth holds against someone opening devtools
+**Console work** (Appwrite MCP doesn't expose these; do in Appwrite Cloud UI):
+- [ ] **Web platform registered** — Overview → Platforms → ensure prod domain (e.g. GitHub Pages URL) is added. Without this, CORS blocks everything.
+- [ ] **Auth → Security** → disable self-signup (low priority: bucket perms already block non-owner IDs, but tidier).
+- [ ] **Check project rate limits** — Settings → Rate limits (if your plan exposes it). Confirm a burst of ~300 requests/minute from one IP won't 429. If unsure, upgrade or reach out to Appwrite support for the event window.
+- [ ] **Confirm storage plan quota** — current bucket is 18.7 MB. Budget ~750 MB for the event. Check project plan ceiling matches.
+
+**Manual testing** (use actual devices on cellular, not office WiFi):
+- [ ] Upload from an iPhone (HEIC pass-through should work — file appears in gallery; preview may be slow on first view while Appwrite transforms it)
+- [ ] Upload from an Android phone with a large JPEG
+- [ ] Trigger a network failure mid-upload (airplane mode toggle) and confirm retry recovers
+- [ ] Queue 10+ photos, add more while uploading, confirm nothing is dropped
+- [ ] Gallery download-all with 50+ photos
+- [ ] Open `/gallery` in incognito, confirm password gate holds. Open devtools → Network, attempt a direct `listFiles` call against the Appwrite REST endpoint without a session — should 401.
+- [ ] Log out from gallery, confirm you can't see files until re-login

@@ -26,7 +26,6 @@ jobs:
           VITE_APPWRITE_ENDPOINT: https://sfo.cloud.appwrite.io/v1
           VITE_APPWRITE_PROJECT_ID: 69876eae003275d80ff8
           VITE_APPWRITE_BUCKET_ID: wedding-photos
-          VITE_GALLERY_PASSWORD: ${{ secrets.GALLERY_PASSWORD }}
 
       - name: Deploy to hub repo
         env:
