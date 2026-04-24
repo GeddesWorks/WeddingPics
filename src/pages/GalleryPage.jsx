@@ -323,7 +323,8 @@ export default function GalleryPage() {
           if (i >= all.length) return;
           const file = all[i];
           const url = storage.getFileDownload(BUCKET_ID, file.$id);
-          const res = await fetch(url);
+          const res = await fetch(url, { credentials: 'include' });
+          if (!res.ok) throw new Error(`Failed to fetch ${file.name}: ${res.status}`);
           const blob = await res.blob();
           zip.file(file.name, blob);
           doneCount++;
