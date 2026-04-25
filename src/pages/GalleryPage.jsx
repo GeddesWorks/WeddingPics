@@ -134,7 +134,7 @@ function Lightbox({ file, onClose, onPrev, onNext, onDelete }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose, onPrev, onNext]);
 
-  const guestName = file.name.replace(/_\d+\.\w+$/, '').replace(/_/g, ' ');
+  const guestName = file.name.replace(/_\d+_[^_]+\.[^.]+$/, '').replace(/_/g, ' ');
 
   return (
     <div className="fixed inset-0 z-50 bg-olive-900/90 backdrop-blur-sm flex flex-col" onClick={onClose}>
@@ -171,7 +171,7 @@ function PhotoGrid({ files, onSelect, onDelete }) {
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
       {files.map((file, idx) => {
         const preview = getFilePreviewUrl(file.$id);
-        const guestName = file.name.replace(/_\d+\.\w+$/, '').replace(/_/g, ' ');
+        const guestName = file.name.replace(/_\d+_[^_]+\.[^.]+$/, '').replace(/_/g, ' ');
         return (
           <div key={file.$id} className="relative aspect-square group">
             <button
